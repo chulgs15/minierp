@@ -1,0 +1,37 @@
+spring:
+  profiles:
+    active: dev
+---
+spring:
+  test:
+    database:
+      replace: NONE
+  profiles: dev
+  datasource:
+    url: jdbc:oracle:thin:@localhost:1521:xe
+    username: scott
+    password: tiger
+    driver-class-name: oracle.jdbc.driver.OracleDriver
+  jpa:
+    open-in-view: true
+    show-sql: true
+    properties:
+      hibernate:
+        ddl-auto: create
+        format_sql: true
+    hibernate:
+      ddl-auto: create
+      format_sql: true
+  devtools:
+    livereload:
+      enabled: true
+    freemaker:
+      cache: false
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+  main:
+    allow-bean-definition-overriding: true
+server:
+  port: 8081
