@@ -1,6 +1,8 @@
 package com.aidant.erp.service;
 
 import com.financial.ledger.domain.ExchangeRate;
+import com.financial.ledger.domain.FinancialAccount;
+import com.financial.ledger.domain.FinancialAccount.AccountType;
 import com.financial.ledger.domain.GLBalance;
 import com.financial.ledger.domain.GLPeriod;
 import com.financial.ledger.domain.IdClass.LedgerFXKey;
@@ -10,7 +12,7 @@ import com.financial.ledger.domain.JournalLineEntry;
 import com.financial.ledger.domain.LedgerForeignExchange;
 import com.financial.ledger.dto.JournalCrLineEntryVO;
 import com.financial.ledger.dto.JournalDrLineEntryVO;
-import com.financial.ledger.enums.FinancialAccounts;
+import com.financial.ledger.repository.FinancialAccountsRepository;
 import com.financial.ledger.repository.GLBalanceRepository;
 import com.financial.ledger.repository.GLPeriodRepository;
 import com.financial.ledger.repository.JournalEntryRepository;
@@ -22,7 +24,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.transaction.Transactional;
 import org.junit.jupiter.api.Assertions;
@@ -54,18 +55,40 @@ public class LedgerServiceTest {
   @Autowired
   private GLBalanceRepository glBalanceRepository;
 
+  @Autowired
+  private FinancialAccountsRepository financialAccountsRepository;
+
   String periodName = null;
   GLPeriod glPeriod = null;
 
   @BeforeEach
   public void setupExchangeRateBeforeAllTest() {
+    // 계정 추가
+    FinancialAccount cash = FinancialAccount.builder()
+        .accountCode("1000")
+        .accountName("CASH")
+        .accountType(AccountType.ASSET)
+        .build();
+
+    FinancialAccount expense = FinancialAccount.builder()
+        .accountCode("2000")
+        .accountName("MEAL")
+        .accountType(AccountType.EXPENSE)
+        .build();
+
+    FinancialAccount equity = FinancialAccount.builder()
+        .accountCode("3000")
+        .accountName("EQUITY")
+        .accountType(AccountType.EQUITY)
+        .build();
+
+    financialAccountsRepository.save(cash);
+    financialAccountsRepository.save(expense);
+    financialAccountsRepository.save(equity);
+
     periodName = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
-    glPeriod = Optional.ofNullable(glPeriodRepository.findByPeriodName(periodName)).orElse(
-        new GLPeriod(periodName));
 
-    glPeriod.markAsOpened();
-
-    glPeriodRepository.save(glPeriod);
+    glPeriod = ledgerService.openPeriod(periodName);
 
     LedgerFXKey fxKey = LedgerFXKey.builder().exchangeDate(LocalDate.now()).fromCurrency("USD")
         .toCurrency(
@@ -80,12 +103,18 @@ public class LedgerServiceTest {
   private JournalEntry getJournalEntry() {
     ExchangeRate exchangeRate = new ExchangeRate();
 
+    FinancialAccount cash = financialAccountsRepository.findById("1000")
+        .orElseThrow();
+
+    FinancialAccount expense = financialAccountsRepository.findById("2000")
+        .orElseThrow();
+
     JournalDrLineEntryVO dr = JournalDrLineEntryVO.builder()
-        .financialAccounts(FinancialAccounts.E_0001).amount(
+        .financialAccount(expense).amount(
             new BigDecimal("1000")).build();
 
     JournalCrLineEntryVO cr = JournalCrLineEntryVO.builder()
-        .financialAccounts(FinancialAccounts.A_0001).amount(
+        .financialAccount(cash).amount(
             new BigDecimal("1000")).build();
 
     JournalEntry journalEntry = JournalEntry.builder().description("hello world")
@@ -111,43 +140,28 @@ public class LedgerServiceTest {
   @Test
   @Transactional
   public void Journal_WhenReversJournal_AmountIsZero() {
-
     JournalEntry journalEntry = getJournalEntry();
-
     ledgerService.post(journalEntry);
-
-    journalEntry.reverse(LocalDate.now());
+    ledgerService.reverse(journalEntry, LocalDate.now());
 
     List<JournalLineEntry> journalLineEntries = journalEntry.getJournalLineEntries();
 
     BigDecimal totalEnteredDr = BigDecimal.ZERO;
+    BigDecimal totalAccountedDr = BigDecimal.ZERO;
+    BigDecimal totalEnteredCr = BigDecimal.ZERO;
+    BigDecimal totalAccountedCr = BigDecimal.ZERO;
+
     for (JournalLineEntry journalLineEntry : journalLineEntries) {
+      totalAccountedDr = totalAccountedDr.add(journalLineEntry.getAccountedDr());
+      totalEnteredCr = totalEnteredCr.add(journalLineEntry.getEnteredCr());
+      totalAccountedCr = totalAccountedCr.add(journalLineEntry.getAccountedCr());
       totalEnteredDr = totalEnteredDr.add(journalLineEntry.getEnteredDr());
     }
 
     Assertions.assertEquals(totalEnteredDr.compareTo(new BigDecimal("0")), 0);
-
-    BigDecimal totalAccountedDr = BigDecimal.ZERO;
-    for (JournalLineEntry journalLineEntry : journalLineEntries) {
-      totalAccountedDr = totalAccountedDr.add(journalLineEntry.getAccountedDr());
-    }
-
     Assertions.assertEquals(totalAccountedDr.compareTo(new BigDecimal("0")), 0);
-
-    BigDecimal totalEnteredCr = BigDecimal.ZERO;
-    for (JournalLineEntry journalLineEntry : journalLineEntries) {
-      totalEnteredCr = totalEnteredCr.add(journalLineEntry.getEnteredCr());
-    }
-
     Assertions.assertEquals(totalEnteredCr.compareTo(new BigDecimal("0")), 0);
-
-    BigDecimal totalAccountedCr = BigDecimal.ZERO;
-    for (JournalLineEntry journalLineEntry : journalLineEntries) {
-      totalAccountedCr = totalAccountedCr.add(journalLineEntry.getAccountedCr());
-    }
-
     Assertions.assertEquals(totalAccountedCr.compareTo(new BigDecimal("0")), 0);
-
     Assertions.assertEquals(journalEntry.getStatus(), JournalEntryStatus.REVERSE);
   }
 
@@ -155,25 +169,8 @@ public class LedgerServiceTest {
   @Test
   @Transactional
   public void GLPost_beforePostingIsCrDrSame_thenTrue() {
-    ExchangeRate exchangeRate = new ExchangeRate();
-
-    JournalDrLineEntryVO dr = JournalDrLineEntryVO.builder()
-        .financialAccounts(FinancialAccounts.E_0001).amount(
-            new BigDecimal("1000")).build();
-
-    JournalCrLineEntryVO cr = JournalCrLineEntryVO.builder()
-        .financialAccounts(FinancialAccounts.A_0001).amount(
-            new BigDecimal("1000")).build();
-
-    JournalEntry journalEntry = JournalEntry.builder().description("hello world").exchangeRate(
-        exchangeRate).glPeriod(glPeriod).build().addDrLine(dr).addCrLine(cr);
-
-    journalEntryRepository.save(journalEntry);
-
-    journalEntry = journalEntryRepository.findById(journalEntry.getJournalId()).orElseThrow(
-        () -> new RuntimeException("에러"));
-
-    Assertions.assertTrue(ledgerService.isSameDrCrAmountInJournal(journalEntry));
+    JournalEntry journalEntry = getJournalEntry();
+    Assertions.assertTrue(journalEntry.isSameDrCrAmountInJournal());
   }
 
   @Test
@@ -185,32 +182,32 @@ public class LedgerServiceTest {
 
     List<JournalLineEntry> postLines = journalLineEntryRepository.findPostedLines(glPeriod);
 
-    Map<FinancialAccounts, BigDecimal> totalCrByAccounts = postLines.stream()
-        .collect(Collectors.groupingBy(JournalLineEntry::getFinancialAccounts,
+    Map<FinancialAccount, BigDecimal> totalCrByAccounts = postLines.stream()
+        .collect(Collectors.groupingBy(JournalLineEntry::getFinancialAccount,
             Collectors
                 .reducing(BigDecimal.ZERO, JournalLineEntry::getAccountedCr, BigDecimal::add)));
 
-    Map<FinancialAccounts, BigDecimal> totalDrByAccounts = postLines.stream()
-        .collect(Collectors.groupingBy(JournalLineEntry::getFinancialAccounts,
+    Map<FinancialAccount, BigDecimal> totalDrByAccounts = postLines.stream()
+        .collect(Collectors.groupingBy(JournalLineEntry::getFinancialAccount,
             Collectors
                 .reducing(BigDecimal.ZERO, JournalLineEntry::getAccountedDr, BigDecimal::add)));
 
-    for (FinancialAccounts financialAccounts : totalDrByAccounts.keySet()) {
+    for (FinancialAccount financialAccount : totalDrByAccounts.keySet()) {
       GLBalance balance = glBalanceRepository
-          .findByglPeriodAndFinancialAccounts(glPeriod, financialAccounts);
+          .findByglPeriodAndFinancialAccount(glPeriod, financialAccount);
 
       Assertions.assertEquals(balance.getPeriodDr()
-              .compareTo(totalDrByAccounts.get(financialAccounts)), 0,
-          String.format("%s DR Amount is different", financialAccounts));
+              .compareTo(totalDrByAccounts.get(financialAccount)), 0,
+          String.format("%s DR Amount is different", financialAccount));
     }
 
-    for (FinancialAccounts financialAccounts : totalCrByAccounts.keySet()) {
+    for (FinancialAccount financialAccount : totalCrByAccounts.keySet()) {
       GLBalance balance = glBalanceRepository
-          .findByglPeriodAndFinancialAccounts(glPeriod, financialAccounts);
+          .findByglPeriodAndFinancialAccount(glPeriod, financialAccount);
 
       Assertions.assertEquals(balance.getPeriodCr()
-              .compareTo(totalCrByAccounts.get(financialAccounts)), 0,
-          String.format("%s CR Amount is different", financialAccounts));
+              .compareTo(totalCrByAccounts.get(financialAccount)), 0,
+          String.format("%s CR Amount is different", financialAccount));
     }
   }
 
@@ -218,41 +215,47 @@ public class LedgerServiceTest {
   @Transactional
   public void Journal_whenPeriodClose_closeOk() {
     for (int i = 0; i < 10; i++) {
-      JournalEntry journalEntry = getJournalEntry();
+      getJournalEntry();
     }
 
-    String periodName = "2021-04";
-    GLPeriod glPeriod = Optional.ofNullable(glPeriodRepository.findByPeriodName(periodName)).orElse(
-        new GLPeriod(periodName));
-
-    glPeriod.markAsOpened();
-
-    glPeriodRepository.save(glPeriod);
-
+    GLPeriod nextGLPeriod = ledgerService.openPeriod("2021-05");
+    glPeriodRepository.save(nextGLPeriod);
 
     for (int i = 0; i < 10; i++) {
+
       ExchangeRate exchangeRate = new ExchangeRate();
 
+      FinancialAccount cash = financialAccountsRepository.findById("1000")
+          .orElseThrow();
+
+      FinancialAccount expense = financialAccountsRepository.findById("2000")
+          .orElseThrow();
+
       JournalDrLineEntryVO dr = JournalDrLineEntryVO.builder()
-          .accountingDate(LocalDate.of(2021, 4, 1))
-          .financialAccounts(FinancialAccounts.E_0001).amount(
+          .accountingDate(LocalDate.of(2021, 5, 1))
+          .financialAccount(expense).amount(
               new BigDecimal("1000")).build();
 
       JournalCrLineEntryVO cr = JournalCrLineEntryVO.builder()
-          .accountingDate(LocalDate.of(2021, 4, 1))
-          .financialAccounts(FinancialAccounts.A_0001).amount(
+          .accountingDate(LocalDate.of(2021, 5, 1))
+          .financialAccount(cash).amount(
               new BigDecimal("1000")).build();
 
       JournalEntry journalEntry = JournalEntry.builder().description("hello world")
-          .glPeriod(glPeriod)
+          .glPeriod(nextGLPeriod)
           .exchangeRate(
               exchangeRate).build().addDrLine(dr).addCrLine(cr);
 
       journalEntryRepository.save(journalEntry);
     }
 
-
     ledgerService.closePeriod(this.glPeriod);
+
+    List<JournalLineEntry> unpostedLines = journalLineEntryRepository
+        .findUnpostedLines(this.glPeriod);
+
+    Assertions.assertEquals(unpostedLines.size(), 0);
+    Assertions.assertTrue(this.glPeriod.isClosed());
   }
 
 }

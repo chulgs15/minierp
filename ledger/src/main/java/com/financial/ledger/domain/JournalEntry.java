@@ -5,14 +5,28 @@ import com.financial.ledger.dto.JournalDrLineEntryVO;
 import com.financial.ledger.dto.JournalLineEntryVO;
 import com.financial.ledger.exception.LedgerApplicationException;
 import com.financial.ledger.exception.LedgerErrors;
+import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.stream.Collectors;
-import lombok.Builder;
-import lombok.Getter;
-
-import javax.persistence.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+import javax.persistence.CascadeType;
+import javax.persistence.Column;
+import javax.persistence.Embedded;
+import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.Index;
+import javax.persistence.OneToMany;
+import javax.persistence.SequenceGenerator;
+import javax.persistence.Table;
+import javax.persistence.Transient;
+import lombok.Builder;
+import lombok.Getter;
 
 @Entity
 @SequenceGenerator(name = "gl_journal_header_s", sequenceName = "gl_journal_header_s", allocationSize = 1)
@@ -98,15 +112,28 @@ public class JournalEntry {
     this.exchangeRate = exchangeRate;
   }
 
+  public boolean isSameDrCrAmountInJournal() {
+    BigDecimal totalEnterdCr = BigDecimal.ZERO;
+    BigDecimal totalEnterdDr = BigDecimal.ZERO;
+    BigDecimal totalAccountedCr = BigDecimal.ZERO;
+    BigDecimal totalAccountedDr = BigDecimal.ZERO;
+
+    for (JournalLineEntry journalLineEntry : journalLineEntries) {
+      totalEnterdDr = totalEnterdDr.add(journalLineEntry.getEnteredDr());
+      totalEnterdCr = totalEnterdCr.add(journalLineEntry.getEnteredCr());
+      totalAccountedDr = totalAccountedDr.add(journalLineEntry.getAccountedDr());
+      totalAccountedCr = totalAccountedCr.add(journalLineEntry.getAccountedCr());
+    }
+
+    return (totalEnterdDr.compareTo(totalEnterdCr) == 0) && (
+        totalAccountedDr.compareTo(totalAccountedCr) == 0);
+  }
+
   public void markAsPosted() {
     this.status = this.status == JournalEntryStatus.NEW ? JournalEntryStatus.POSTED : this.status;
   }
 
-  private void markAsReversed() {
-    this.status = JournalEntryStatus.REVERSE;
-  }
-
-  public void reverse(LocalDate accountingDate) {
+  public void reverse(LocalDate reverseDate) {
     if (!this.status.isPosted()) {
       throw new LedgerApplicationException(LedgerErrors.LEDGER_00004);
     }
@@ -115,14 +142,26 @@ public class JournalEntry {
       throw new LedgerApplicationException(LedgerErrors.LEDGER_00005);
     }
 
-    this.journalLineEntries.addAll(_createReverseJournalLines());
+    this.journalLineEntries.addAll(_createReverseJournalLines(reverseDate));
 
     markAsReversed();
   }
 
-  private List<JournalLineEntry> _createReverseJournalLines() {
+  private List<JournalLineEntry> _createReverseJournalLines(LocalDate accountingDate) {
     return this.journalLineEntries.stream()
-        .map(JournalLineEntry::getNewReverseLine)
+        .map(x -> x.getNewReverseLine(accountingDate))
         .collect(Collectors.toList());
+  }
+
+  private void markAsReversed() {
+    this.status = JournalEntryStatus.REVERSE;
+  }
+
+  public Map<GLPeriod,Map<FinancialAccount, List<JournalLineEntry>>> getUnpostedJournalLinesGroupByPeriodAndAccounts() {
+    return  this.journalLineEntries.stream()
+            .filter(x -> x.getGlPeriod().isOpened() && !x.isPosted())
+            .collect(Collectors.groupingBy(JournalLineEntry::getGlPeriod,
+                Collectors
+                    .groupingBy(JournalLineEntry::getFinancialAccount, Collectors.toList())));
   }
 }

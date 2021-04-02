@@ -4,11 +4,9 @@ import com.financial.ledger.domain.GLPeriod;
 import com.financial.ledger.domain.JournalEntry;
 import com.financial.ledger.domain.JournalLineEntry;
 import com.financial.ledger.domain.JournalLineEntry.PostFlag;
-import com.financial.ledger.repository.resultset.JournalDrCrTotalByFinancialAccountsDto;
 import com.financial.ledger.repository.resultset.JournalDrCrTotalDto;
-
-import javax.persistence.EntityManager;
 import java.util.List;
+import javax.persistence.EntityManager;
 
 public class JournalLineEntryRepositoryImpl implements JournalLineEntryRepositoryCustom {
 

@@ -1,9 +1,7 @@
 package com.financial.ledger.repository.resultset;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-
 import java.math.BigDecimal;
+import lombok.Getter;
 
 @Getter
 public class JournalDrCrTotalDto {

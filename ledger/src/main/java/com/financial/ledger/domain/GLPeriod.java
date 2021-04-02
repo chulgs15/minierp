@@ -2,14 +2,23 @@ package com.financial.ledger.domain;
 
 import com.financial.ledger.exception.LedgerApplicationException;
 import com.financial.ledger.exception.LedgerErrors;
-import lombok.Getter;
-import lombok.ToString;
-
-import javax.persistence.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.Index;
+import javax.persistence.OneToMany;
+import javax.persistence.SequenceGenerator;
+import javax.persistence.Table;
+import lombok.Getter;
+import lombok.ToString;
 
 @Entity
 @Table(name = "gl_periods", indexes = {@Index(name = "GL_PERIOD_U1", unique = true, columnList = "period_name")})
@@ -43,7 +52,7 @@ public class GLPeriod {
   private List<JournalLineEntry> journalLineEntries = new ArrayList<>();
 
   public enum PeriodStatus {
-    OPEN, CLOSE, NEVER_OPENED;
+    OPEN, CLOSE, NEVER_OPENED
   }
 
   public GLPeriod() {
@@ -59,6 +68,10 @@ public class GLPeriod {
 
   public boolean isOpened() {
     return PeriodStatus.OPEN == status;
+  }
+
+  public boolean isClosed() {
+    return PeriodStatus.CLOSE == status;
   }
 
   public boolean isValidAccountingDate(LocalDate accountingDate) {

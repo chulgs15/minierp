@@ -2,10 +2,9 @@ package com.financial.ledger.repository.interfaces;
 
 import com.financial.ledger.domain.GLPeriod;
 import com.financial.ledger.domain.JournalEntry;
-
 import com.financial.ledger.domain.JournalLineEntry.PostFlag;
-import javax.persistence.EntityManager;
 import java.util.List;
+import javax.persistence.EntityManager;
 
 public class JournalEntryRepositoryImpl implements JournalEntryRepositoryCustom {
 

@@ -1,14 +1,13 @@
 package com.financial.ledger.domain;
 
-import lombok.Getter;
-import lombok.ToString;
-
-import javax.persistence.Column;
-import javax.persistence.Embeddable;
-import javax.persistence.Embedded;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.NumberFormat;
+import javax.persistence.Column;
+import javax.persistence.Embeddable;
+import javax.persistence.Embedded;
+import lombok.Getter;
+import lombok.ToString;
 
 @Embeddable
 @ToString

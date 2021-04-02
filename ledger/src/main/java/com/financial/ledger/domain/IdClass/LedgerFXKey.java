@@ -1,9 +1,12 @@
 package com.financial.ledger.domain.IdClass;
 
-import lombok.*;
-
 import java.io.Serializable;
 import java.time.LocalDate;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 
 
 @Setter
