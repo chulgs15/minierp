@@ -29,8 +29,8 @@ public class JournalLineEntryRepositoryImpl implements JournalLineEntryRepositor
   @Override
   public List<JournalLineEntry> findUnpostLinesByJournal(JournalEntry journalEntry) {
     String sql = "select l from JournalLineEntry l where 1=1 " +
-            "AND l.journalEntry = :journalEntry " +
-            "AND l.postFlag = :postedFlag ";
+        "AND l.journalEntry = :journalEntry " +
+        "AND l.postFlag = :postedFlag ";
     return entityManager.createQuery(sql, JournalLineEntry.class)
         .setParameter("journalEntry", journalEntry)
         .setParameter("postedFlag", JournalLineEntry.PostFlag.NEW)

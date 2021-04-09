@@ -90,6 +90,23 @@ public class JournalLineEntry {
     setDrCrAmount(dto.getDeliminator());
   }
 
+  private JournalLineEntry(JournalEntry journalEntry, GLPeriod glPeriod,
+      AccountingAmount accountingAmount,
+      FinancialAccount financialAccount, BigDecimal enteredDr, BigDecimal enteredCr,
+      BigDecimal accountedDr, BigDecimal accountedCr, PostFlag postFlag,
+      LocalDate accountingDate) {
+    this.journalEntry = journalEntry;
+    this.glPeriod = glPeriod;
+    this.accountingAmount = accountingAmount;
+    this.financialAccount = financialAccount;
+    this.enteredDr = enteredDr;
+    this.enteredCr = enteredCr;
+    this.accountedDr = accountedDr;
+    this.accountedCr = accountedCr;
+    this.postFlag = postFlag;
+    this.accountingDate = accountingDate;
+  }
+
   private void setDrCrAmount(DrCrDeliminator deliminator) {
     if (deliminator.equals(DrCrDeliminator.DR)) {
       this.enteredDr = this.accountingAmount.getAmount();
@@ -153,22 +170,5 @@ public class JournalLineEntry {
 
   public enum PostFlag {
     POSTED, NEW
-  }
-
-  private JournalLineEntry(JournalEntry journalEntry, GLPeriod glPeriod,
-      AccountingAmount accountingAmount,
-      FinancialAccount financialAccount, BigDecimal enteredDr, BigDecimal enteredCr,
-      BigDecimal accountedDr, BigDecimal accountedCr, PostFlag postFlag,
-      LocalDate accountingDate) {
-    this.journalEntry = journalEntry;
-    this.glPeriod = glPeriod;
-    this.accountingAmount = accountingAmount;
-    this.financialAccount = financialAccount;
-    this.enteredDr = enteredDr;
-    this.enteredCr = enteredCr;
-    this.accountedDr = accountedDr;
-    this.accountedCr = accountedCr;
-    this.postFlag = postFlag;
-    this.accountingDate = accountingDate;
   }
 }

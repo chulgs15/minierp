@@ -35,14 +35,6 @@ public class FinancialAccount {
   @OneToMany(mappedBy = "financialAccount")
   private List<GLBalance> glBalances = new ArrayList<>();
 
-  public enum AccountEnabledFlag {
-    YES, NO
-  }
-
-  public enum AccountType {
-    ASSET, EXPENSE, EQUITY, EXPENSES, REVENUE;
-  }
-
   public FinancialAccount() {
   }
 
@@ -52,5 +44,13 @@ public class FinancialAccount {
     this.accountCode = accountCode;
     this.accountName = accountName;
     this.accountType = accountType;
+  }
+
+  public enum AccountEnabledFlag {
+    YES, NO
+  }
+
+  public enum AccountType {
+    ASSET, EXPENSE, EQUITY, EXPENSES, REVENUE;
   }
 }

@@ -14,6 +14,7 @@ import lombok.ToString;
 @ToString
 @RequiredArgsConstructor
 public class LedgerFXKey implements Serializable {
+
   private LocalDate exchangeDate;
   private String fromCurrency;
   private String toCurrency;

@@ -38,7 +38,7 @@ public class LedgerForeignExchange {
 
   @Builder
   public LedgerForeignExchange(LedgerFXKey fxKey,
-                               BigDecimal exchangeRate) {
+      BigDecimal exchangeRate) {
     this.exchangeDate = fxKey.getExchangeDate();
     this.fromCurrency = fxKey.getFromCurrency();
     this.toCurrency = fxKey.getToCurrency();

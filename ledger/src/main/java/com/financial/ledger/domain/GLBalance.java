@@ -48,6 +48,12 @@ public class GLBalance {
   @Column(name = "period_cr")
   private BigDecimal periodCr = BigDecimal.ZERO;
 
+  @Column(name = "balance_dr")
+  private BigDecimal balanceDr = BigDecimal.ZERO;
+
+  @Column(name = "balance_cr")
+  private BigDecimal balanceCr = BigDecimal.ZERO;
+
   @Column(name = "balance_amount")
   private BigDecimal balanceAmount = BigDecimal.ZERO;
 
@@ -59,7 +65,6 @@ public class GLBalance {
     this.financialAccount = financialAccount;
   }
 
-
   public void addCr(BigDecimal accountedCr) {
     this.periodCr = this.periodCr.add(accountedCr);
     applyBalanceAmount();
@@ -70,9 +75,21 @@ public class GLBalance {
     applyBalanceAmount();
   }
 
+  public void addBeginCr(BigDecimal beginCr) {
+    this.beginCr = this.beginCr.add(beginCr);
+    applyBalanceAmount();
+  }
+
+  public void addBeginDr(BigDecimal beginDr) {
+    this.beginDr = this.beginDr.add(beginDr);
+    applyBalanceAmount();
+  }
+
   private void applyBalanceAmount() {
-    this.balanceAmount = this.beginDr.add(this.periodDr).subtract(this.beginCr)
-        .subtract(this.periodCr);
+    this.balanceDr = this.beginDr.add(this.periodDr);
+    this.balanceCr = this.beginCr.add(this.periodCr);
+
+    this.balanceAmount = this.balanceDr.subtract(this.balanceCr);
   }
 
   public void post(List<JournalLineEntry> journalLineEntries) {

@@ -1,5 +1,7 @@
 package com.financial.ledger.service;
 
+import static com.financial.ledger.exception.LedgerErrors.LEDGER_00009;
+
 import com.financial.ledger.domain.FinancialAccount;
 import com.financial.ledger.domain.FinancialAccount.AccountEnabledFlag;
 import com.financial.ledger.domain.GLBalance;
@@ -11,12 +13,10 @@ import com.financial.ledger.repository.FinancialAccountsRepository;
 import com.financial.ledger.repository.GLBalanceRepository;
 import com.financial.ledger.repository.GLPeriodRepository;
 import com.financial.ledger.repository.JournalEntryRepository;
-import com.financial.ledger.repository.JournalLineEntryRepository;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
 import javax.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +40,8 @@ public class LedgerService {
 
     var unpostedJournalLinesGroupByPeriodAndAccounts
         = Optional.ofNullable(journalEntry.getUnpostedJournalLinesGroupByPeriodAndAccounts())
-        .orElseThrow(() -> new RuntimeException("Posting 대상이 없습니다."));
+        // TODO: 오류로 바꿀 필요가 있음.
+        .orElseThrow(() -> new LedgerApplicationException(LEDGER_00009));
 
     unpostedJournalLinesGroupByPeriodAndAccounts.keySet().stream()
         .flatMap(x -> unpostedJournalLinesGroupByPeriodAndAccounts.get(x).keySet().stream()
@@ -66,7 +67,7 @@ public class LedgerService {
 
   public GLPeriod openPeriod(String periodName) {
     GLPeriod glPeriod = Optional.ofNullable(glPeriodRepository.findByPeriodName(periodName))
-        .orElseGet(()-> {
+        .orElseGet(() -> {
           GLPeriod tmpGLPeriod = glPeriodRepository.save(new GLPeriod(periodName));
           financialAccountsRepository.findAll()
               .stream().filter(x -> x.getEnabledFlag() == AccountEnabledFlag.YES)
@@ -74,8 +75,25 @@ public class LedgerService {
           return tmpGLPeriod;
         });
 
+    _openNextPeriod(periodName);
+
     glPeriod.markAsOpened();
     return glPeriod;
+  }
+
+  private void _openNextPeriod(String periodName) {
+    LocalDate nextPeriod = LocalDate
+        .parse(periodName + "-01", DateTimeFormatter.ofPattern("yyyy-MM-dd")).plusMonths(1);
+    String nextPeriodName = DateTimeFormatter.ofPattern("yyyy-MM").format(nextPeriod);
+
+    Optional.ofNullable(glPeriodRepository.findByPeriodName(nextPeriodName))
+        .orElseGet(() -> {
+          GLPeriod tmpGLPeriod = glPeriodRepository.save(new GLPeriod(nextPeriodName));
+          financialAccountsRepository.findAll()
+              .stream().filter(x -> x.getEnabledFlag() == AccountEnabledFlag.YES)
+              .forEach(x -> addFinacialAccount(tmpGLPeriod, x));
+          return tmpGLPeriod;
+        });
   }
 
   public GLBalance addFinacialAccount(GLPeriod glPeriod, FinancialAccount financialAccount) {
@@ -87,12 +105,31 @@ public class LedgerService {
   }
 
   public void closePeriod(GLPeriod glPeriod) {
+    _postCurrentPeriodLinesByGLPeriod(glPeriod);
+    _updateNextGLBalanceBeginAmount(glPeriod);
+    glPeriod.markAsClosed();
+  }
+
+  private void _updateNextGLBalanceBeginAmount(GLPeriod glPeriod) {
+    GLPeriod nextGLPeriod = glPeriodRepository.findByPeriodName(glPeriod.getNextPeriodName());
+
+    List<GLBalance> glBalances = glBalanceRepository.findByglPeriod(glPeriod);
+    for (GLBalance glBalance : glBalances) {
+      GLBalance nextPeriodGLBalance = glBalanceRepository
+          .findByglPeriodAndFinancialAccount(nextGLPeriod, glBalance.getFinancialAccount());
+
+      nextPeriodGLBalance.addBeginDr(glBalance.getBalanceDr());
+      nextPeriodGLBalance.addBeginCr(glBalance.getBalanceCr());
+
+      glBalanceRepository.save(nextPeriodGLBalance);
+    }
+  }
+
+  private void _postCurrentPeriodLinesByGLPeriod(GLPeriod glPeriod) {
     List<JournalEntry> unpostJournal = journalEntryRepository.findUnpostJournal(glPeriod);
 
     for (JournalEntry journalEntry : unpostJournal) {
       post(journalEntry);
     }
-
-    glPeriod.markAsClosed();
   }
 }

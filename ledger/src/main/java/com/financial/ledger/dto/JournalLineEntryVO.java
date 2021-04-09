@@ -9,6 +9,7 @@ import lombok.Getter;
 
 @Getter
 public abstract class JournalLineEntryVO {
+
   @NotNull
   private JournalLineEntry.DrCrDeliminator deliminator;
 
@@ -22,9 +23,9 @@ public abstract class JournalLineEntryVO {
   private FinancialAccount financialAccount;
 
   public JournalLineEntryVO(JournalLineEntry.DrCrDeliminator deliminator,
-                            BigDecimal amount,
-                            LocalDate accountingDate,
-                            FinancialAccount financialAccount) {
+      BigDecimal amount,
+      LocalDate accountingDate,
+      FinancialAccount financialAccount) {
     this.deliminator = deliminator;
     this.amount = amount;
     this.accountingDate = accountingDate == null ? LocalDate.now() : accountingDate;

@@ -21,7 +21,8 @@ import lombok.Getter;
 import lombok.ToString;
 
 @Entity
-@Table(name = "gl_periods", indexes = {@Index(name = "GL_PERIOD_U1", unique = true, columnList = "period_name")})
+@Table(name = "gl_periods", indexes = {
+    @Index(name = "GL_PERIOD_U1", unique = true, columnList = "period_name")})
 @SequenceGenerator(name = "gl_period_s", sequenceName = "gl_period_s", allocationSize = 1)
 @Getter
 @ToString
@@ -51,10 +52,6 @@ public class GLPeriod {
   @OneToMany(mappedBy = "glPeriod")
   private List<JournalLineEntry> journalLineEntries = new ArrayList<>();
 
-  public enum PeriodStatus {
-    OPEN, CLOSE, NEVER_OPENED
-  }
-
   public GLPeriod() {
   }
 
@@ -66,6 +63,12 @@ public class GLPeriod {
     this.status = PeriodStatus.NEVER_OPENED;
   }
 
+  private void _checkValidPeriodName(String periodName) {
+    if (periodName == null || !periodName.matches("^(\\d{4}([-]\\d{2})?)?$")) {
+      throw new LedgerApplicationException(LedgerErrors.LEDGER_00002);
+    }
+  }
+
   public boolean isOpened() {
     return PeriodStatus.OPEN == status;
   }
@@ -75,7 +78,6 @@ public class GLPeriod {
   }
 
   public boolean isValidAccountingDate(LocalDate accountingDate) {
-//    return accountingDate.isAfter(this.periodStartDate) && accountingDate.isBefore(this.periodEndDate);
     return (accountingDate.compareTo(this.periodStartDate) >= 0) &&
         (accountingDate.compareTo(this.periodEndDate) <= 0);
   }
@@ -88,9 +90,11 @@ public class GLPeriod {
     this.status = PeriodStatus.CLOSE;
   }
 
-  private void _checkValidPeriodName(String periodName) {
-    if (periodName == null || !periodName.matches("^(\\d{4}([-]\\d{2})?)?$")) {
-      throw new LedgerApplicationException(LedgerErrors.LEDGER_00002);
-    }
+  public String getNextPeriodName() {
+    return this.periodStartDate.plusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM"));
+  }
+
+  public enum PeriodStatus {
+    OPEN, CLOSE, NEVER_OPENED
   }
 }

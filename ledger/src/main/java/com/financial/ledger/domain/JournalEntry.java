@@ -30,7 +30,8 @@ import lombok.Getter;
 
 @Entity
 @SequenceGenerator(name = "gl_journal_header_s", sequenceName = "gl_journal_header_s", allocationSize = 1)
-@Table(name = "gl_journal_header_all", indexes = {@Index(name = "gl_journal_header_u1", unique = true, columnList = "header_name")})
+@Table(name = "gl_journal_header_all", indexes = {
+    @Index(name = "gl_journal_header_u1", unique = true, columnList = "header_name")})
 @Getter
 public class JournalEntry {
 
@@ -60,6 +61,19 @@ public class JournalEntry {
   @OneToMany(mappedBy = "journalEntry", cascade = CascadeType.ALL)
   private List<JournalLineEntry> journalLineEntries = new ArrayList<>();
 
+  public JournalEntry() {
+    this.journalEntryName = "Journal " + System.nanoTime();
+    this.status = JournalEntryStatus.NEW;
+  }
+
+  @Builder
+  public JournalEntry(GLPeriod glPeriod, String description, ExchangeRate exchangeRate) {
+    this();
+    this.glPeriod = glPeriod;
+    this.description = description;
+    this.exchangeRate = exchangeRate;
+  }
+
   public JournalEntry addCrLine(JournalCrLineEntryVO crDto) {
     _createAndAddJournalLine(crDto);
     return this;
@@ -75,41 +89,6 @@ public class JournalEntry {
       throw new LedgerApplicationException(LedgerErrors.LEDGER_00001);
     }
     this.journalLineEntries.add(new JournalLineEntry(this, dto));
-  }
-
-  public JournalEntry() {
-    this.journalEntryName = "Journal " + System.nanoTime();
-    this.status = JournalEntryStatus.NEW;
-  }
-
-  public enum JournalEntryStatus {
-    NEW {
-      @Override
-      public boolean isPosted() {
-        return false;
-      }
-    }, POSTED {
-
-    }, REVERSE {
-      @Override
-      public boolean isReversed() {
-        return true;
-      }
-    };
-
-    public boolean isReversed() {return false;}
-
-    public boolean isPosted() {
-      return true;
-    }
-  }
-
-  @Builder
-  public JournalEntry(GLPeriod glPeriod, String description, ExchangeRate exchangeRate) {
-    this();
-    this.glPeriod = glPeriod;
-    this.description = description;
-    this.exchangeRate = exchangeRate;
   }
 
   public boolean isSameDrCrAmountInJournal() {
@@ -157,11 +136,35 @@ public class JournalEntry {
     this.status = JournalEntryStatus.REVERSE;
   }
 
-  public Map<GLPeriod,Map<FinancialAccount, List<JournalLineEntry>>> getUnpostedJournalLinesGroupByPeriodAndAccounts() {
-    return  this.journalLineEntries.stream()
-            .filter(x -> x.getGlPeriod().isOpened() && !x.isPosted())
-            .collect(Collectors.groupingBy(JournalLineEntry::getGlPeriod,
-                Collectors
-                    .groupingBy(JournalLineEntry::getFinancialAccount, Collectors.toList())));
+  public Map<GLPeriod, Map<FinancialAccount, List<JournalLineEntry>>> getUnpostedJournalLinesGroupByPeriodAndAccounts() {
+    return this.journalLineEntries.stream()
+        .filter(x -> x.getGlPeriod().isOpened() && !x.isPosted())
+        .collect(Collectors.groupingBy(JournalLineEntry::getGlPeriod,
+            Collectors
+                .groupingBy(JournalLineEntry::getFinancialAccount, Collectors.toList())));
+  }
+
+  public enum JournalEntryStatus {
+    NEW {
+      @Override
+      public boolean isPosted() {
+        return false;
+      }
+    }, POSTED {
+
+    }, REVERSE {
+      @Override
+      public boolean isReversed() {
+        return true;
+      }
+    };
+
+    public boolean isReversed() {
+      return false;
+    }
+
+    public boolean isPosted() {
+      return true;
+    }
   }
 }

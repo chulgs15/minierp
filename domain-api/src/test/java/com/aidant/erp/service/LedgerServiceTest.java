@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.transaction.Transactional;
 import org.junit.jupiter.api.Assertions;
@@ -34,8 +35,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.Rollback;
 
 @SpringBootTest
-@Rollback(value = false)
 public class LedgerServiceTest {
+
+  private String periodName = null;
+  private GLPeriod glPeriod = null;
 
   @Autowired
   private LedgerService ledgerService;
@@ -57,9 +60,6 @@ public class LedgerServiceTest {
 
   @Autowired
   private FinancialAccountsRepository financialAccountsRepository;
-
-  String periodName = null;
-  GLPeriod glPeriod = null;
 
   @BeforeEach
   public void setupExchangeRateBeforeAllTest() {
@@ -100,7 +100,7 @@ public class LedgerServiceTest {
     ledgerForeignExchangeRepo.save(exchangeRate);
   }
 
-  private JournalEntry getJournalEntry() {
+  private JournalEntry getJournalEntry(GLPeriod glPeriod) {
     ExchangeRate exchangeRate = new ExchangeRate();
 
     FinancialAccount cash = financialAccountsRepository.findById("1000")
@@ -110,12 +110,16 @@ public class LedgerServiceTest {
         .orElseThrow();
 
     JournalDrLineEntryVO dr = JournalDrLineEntryVO.builder()
-        .financialAccount(expense).amount(
-            new BigDecimal("1000")).build();
+        .financialAccount(expense)
+        .accountingDate(glPeriod.getPeriodStartDate())
+        .amount(new BigDecimal("1000"))
+        .build();
 
     JournalCrLineEntryVO cr = JournalCrLineEntryVO.builder()
-        .financialAccount(cash).amount(
-            new BigDecimal("1000")).build();
+        .financialAccount(cash)
+        .accountingDate(glPeriod.getPeriodStartDate())
+        .amount(new BigDecimal("1000"))
+        .build();
 
     JournalEntry journalEntry = JournalEntry.builder().description("hello world")
         .glPeriod(glPeriod)
@@ -128,7 +132,7 @@ public class LedgerServiceTest {
   @Test
   @Transactional
   public void GLPost_whenPostBySingleJournal_thenPostAmountApplied() {
-    JournalEntry journalEntry = getJournalEntry();
+    JournalEntry journalEntry = getJournalEntry(this.glPeriod);
 
     ledgerService.post(journalEntry);
 
@@ -140,7 +144,7 @@ public class LedgerServiceTest {
   @Test
   @Transactional
   public void Journal_WhenReversJournal_AmountIsZero() {
-    JournalEntry journalEntry = getJournalEntry();
+    JournalEntry journalEntry = getJournalEntry(this.glPeriod);
     ledgerService.post(journalEntry);
     ledgerService.reverse(journalEntry, LocalDate.now());
 
@@ -169,7 +173,7 @@ public class LedgerServiceTest {
   @Test
   @Transactional
   public void GLPost_beforePostingIsCrDrSame_thenTrue() {
-    JournalEntry journalEntry = getJournalEntry();
+    JournalEntry journalEntry = getJournalEntry(this.glPeriod);
     Assertions.assertTrue(journalEntry.isSameDrCrAmountInJournal());
   }
 
@@ -177,7 +181,7 @@ public class LedgerServiceTest {
   @Transactional
   public void Journal_whenDrCrDifferent_errorOccured() {
     // NPE 를 피하기 위해서 사용.
-    JournalEntry journalEntry = getJournalEntry();
+    JournalEntry journalEntry = getJournalEntry(this.glPeriod);
     ledgerService.post(journalEntry);
 
     List<JournalLineEntry> postLines = journalLineEntryRepository.findPostedLines(glPeriod);
@@ -215,36 +219,18 @@ public class LedgerServiceTest {
   @Transactional
   public void Journal_whenPeriodClose_closeOk() {
     for (int i = 0; i < 10; i++) {
-      getJournalEntry();
+      getJournalEntry(this.glPeriod);
     }
 
-    GLPeriod nextGLPeriod = ledgerService.openPeriod("2021-05");
+    String nextGLPeriodName = DateTimeFormatter.ofPattern("yyyy-MM")
+        .format(LocalDate.now().plusMonths(1));
+
+    GLPeriod nextGLPeriod = ledgerService.openPeriod(nextGLPeriodName);
     glPeriodRepository.save(nextGLPeriod);
 
     for (int i = 0; i < 10; i++) {
 
-      ExchangeRate exchangeRate = new ExchangeRate();
-
-      FinancialAccount cash = financialAccountsRepository.findById("1000")
-          .orElseThrow();
-
-      FinancialAccount expense = financialAccountsRepository.findById("2000")
-          .orElseThrow();
-
-      JournalDrLineEntryVO dr = JournalDrLineEntryVO.builder()
-          .accountingDate(LocalDate.of(2021, 5, 1))
-          .financialAccount(expense).amount(
-              new BigDecimal("1000")).build();
-
-      JournalCrLineEntryVO cr = JournalCrLineEntryVO.builder()
-          .accountingDate(LocalDate.of(2021, 5, 1))
-          .financialAccount(cash).amount(
-              new BigDecimal("1000")).build();
-
-      JournalEntry journalEntry = JournalEntry.builder().description("hello world")
-          .glPeriod(nextGLPeriod)
-          .exchangeRate(
-              exchangeRate).build().addDrLine(dr).addCrLine(cr);
+      JournalEntry journalEntry = getJournalEntry(nextGLPeriod);
 
       journalEntryRepository.save(journalEntry);
     }
@@ -258,4 +244,60 @@ public class LedgerServiceTest {
     Assertions.assertTrue(this.glPeriod.isClosed());
   }
 
+  @Test
+  @Transactional
+  public void Journal_whenPeriodOpenAndClose12Months_checkGLBalanceIsOk() {
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM");
+    int year = LocalDate.now().getYear();
+    for (int i = 0; i < 12; i++) {
+
+      LocalDate periodDate = LocalDate.of(year, 1, 1);
+      periodDate = periodDate.plusMonths(i);
+
+      String periodName = formatter.format(periodDate);
+      GLPeriod glPeriod = Optional.ofNullable(glPeriodRepository.findByPeriodName(periodName))
+          .orElse(ledgerService.openPeriod(periodName));
+
+      JournalEntry journalEntry = getJournalEntry(glPeriod);
+
+      journalEntryRepository.save(journalEntry);
+
+      ledgerService.closePeriod(glPeriod);
+    }
+
+    List<GLBalance> glBalances = glBalanceRepository.findAll();
+    Map<FinancialAccount, BigDecimal> drByAccounts = glBalances.stream()
+        .collect(Collectors.groupingBy(GLBalance::getFinancialAccount,
+            Collectors.reducing(BigDecimal.ZERO, GLBalance::getPeriodDr, BigDecimal::add)));
+
+    Map<FinancialAccount, BigDecimal> crByAccounts = glBalances.stream()
+        .collect(Collectors.groupingBy(GLBalance::getFinancialAccount,
+            Collectors.reducing(BigDecimal.ZERO, GLBalance::getPeriodCr, BigDecimal::add)));
+
+    String lastPeriodName = DateTimeFormatter.ofPattern("yyyy-MM")
+        .format(LocalDate.of(year, 12, 1));
+
+    List<GLBalance> lastGLBalance = glBalances.stream()
+        .filter(x -> x.getGlPeriod().getPeriodName().equals(lastPeriodName))
+        .collect(Collectors.toList());
+
+    int result;
+    for (GLBalance glBalance : lastGLBalance) {
+      FinancialAccount financialAccount = glBalance.getFinancialAccount();
+
+      BigDecimal drAmount = drByAccounts.get(financialAccount);
+      result = glBalance.getBalanceDr().compareTo(drAmount);
+      System.out.printf("acct : %s | drAmount : %s | balacneDr : %s | result : %d \n",
+          financialAccount.getAccountCode(), drAmount.toString()
+          , glBalance.getBalanceDr(), result);
+      Assertions.assertEquals(result, 0);
+
+      BigDecimal crAmount = crByAccounts.get(financialAccount);
+      result = glBalance.getBalanceCr().compareTo(crAmount);
+      System.out.printf("acct : %s | crAmount : %s | balacneCr : %s | result : %d \n",
+          financialAccount.getAccountCode(), crAmount.toString()
+          , glBalance.getBalanceCr(), result);
+      Assertions.assertEquals(result, 0);
+    }
+  }
 }

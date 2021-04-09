@@ -32,6 +32,13 @@ public class AccountingAmount {
     this.functionalAmount = _getCalculatedFunctionalAmount(amount);
   }
 
+  private AccountingAmount(ExchangeRate exchangeRate, BigDecimal amount,
+      BigDecimal functionalAmount) {
+    this.exchangeRate = exchangeRate;
+    this.amount = amount;
+    this.functionalAmount = functionalAmount;
+  }
+
   public AccountingAmount getNegateAmount() {
     return new AccountingAmount(this.exchangeRate,
         amount.negate(),
@@ -46,11 +53,5 @@ public class AccountingAmount {
 
     return this.exchangeRate.getExchangeRate().multiply(amount)
         .setScale(roundPoint, roundingMode);
-  }
-
-  private AccountingAmount(ExchangeRate exchangeRate, BigDecimal amount, BigDecimal functionalAmount) {
-    this.exchangeRate = exchangeRate;
-    this.amount = amount;
-    this.functionalAmount = functionalAmount;
   }
 }
